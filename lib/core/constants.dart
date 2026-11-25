@@ -8,8 +8,8 @@ class AppConstants {
   static const String institution =
       'Limkokwing University of Creative Technology, Sierra Leone';
   static const String moduleCode = 'PROG 202 - Software Engineering';
-  static const String appVersion = '1.0.0+1';
-  static const String logoAssetPath = 'assets/images/logo.png';
+  static const String appVersion = '1.0.2+3';
+  static const String logoAssetPath = 'assets/app_icon.png';
 
   // Default prototype accounts (also documented in README.md)
   static const String adminEmail = 'admin@limkokwing.edu.sl';

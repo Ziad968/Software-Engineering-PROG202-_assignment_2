@@ -90,7 +90,7 @@ class _StudentPersonalSummary extends StatelessWidget {
           mainAxisSpacing: 10,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 1.55,
+          childAspectRatio: 2.55,
           children: [
             StatCard(
               title: 'My Average',
