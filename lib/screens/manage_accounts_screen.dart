@@ -8,8 +8,8 @@ import '../widgets/app_button.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_text_field.dart';
 
-/// Screen for Administrator to add, edit credentials, toggle Lecturer admin
-/// status, and remove accounts.
+/// Screen for Administrator to add, search, filter, edit credentials,
+/// toggle Lecturer admin status, and remove accounts.
 class ManageAccountsScreen extends StatefulWidget {
   const ManageAccountsScreen({super.key});
 
@@ -22,15 +22,17 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _studentIdController = TextEditingController();
-  String _selectedRole = 'Lecturer';
+  final _searchController = TextEditingController();
+
+  String _roleFilter = 'All'; // 'All', 'Student', 'Lecturer'
+  String _searchQuery = '';
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _studentIdController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -43,15 +45,13 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
       name: _nameController.text.trim(),
       email: _emailController.text.trim(),
       password: _passwordController.text,
-      role: _selectedRole,
-      linkedStudentId:
-          _selectedRole == 'Student' ? _studentIdController.text.trim() : null,
+      role: AppConstants.roleLecturer,
     );
 
     if (!added) {
       UIHelpers.showSnackBar(
         context,
-        'Account email already exists or invalid role.',
+        'Account already exists or email is not ${AppConstants.allowedEmailDomain}.',
         isError: true,
       );
       return;
@@ -60,12 +60,11 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
     _nameController.clear();
     _emailController.clear();
     _passwordController.clear();
-    _studentIdController.clear();
     setState(() {});
 
     UIHelpers.showSnackBar(
       context,
-      '$_selectedRole account added successfully.',
+      'Lecturer account added successfully.',
     );
   }
 
@@ -111,7 +110,7 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
               } else {
                 UIHelpers.showSnackBar(
                   context,
-                  'Could not update credentials (check duplicate email).',
+                  'Could not update credentials (check ${AppConstants.allowedEmailDomain} or duplicate email).',
                   isError: true,
                 );
               }
@@ -147,6 +146,14 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
     }
   }
 
+  Future<void> _handleRefresh() async {
+    await ResultsService.instance.syncFromSupabase();
+    if (mounted) {
+      setState(() {});
+      UIHelpers.showSnackBar(context, 'Accounts synced with Supabase.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final service = ResultsService.instance;
@@ -166,20 +173,92 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
       );
     }
 
-    final managedAccounts = service.accounts
-        .where(
-          (a) =>
-              a.email.toLowerCase() != AppConstants.adminEmail.toLowerCase(),
-        )
-        .toList();
+    final query = _searchQuery.trim().toLowerCase();
+    final filteredAccounts = service.accounts.where((a) {
+      if (a.email.toLowerCase() == AppConstants.adminEmail.toLowerCase()) {
+        return false;
+      }
+
+      if (_roleFilter == AppConstants.roleStudent &&
+          a.role != AppConstants.roleStudent) {
+        return false;
+      }
+
+      if (_roleFilter == AppConstants.roleLecturer &&
+          a.role != AppConstants.roleLecturer &&
+          a.role != AppConstants.roleAdministrator) {
+        return false;
+      }
+
+      if (query.isEmpty) return true;
+      return a.name.toLowerCase().contains(query) ||
+          a.email.toLowerCase().contains(query) ||
+          (a.linkedStudentId?.toLowerCase().contains(query) ?? false);
+    }).toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Manage Accounts')),
+      appBar: AppBar(
+        title: const Text('Manage Accounts'),
+        actions: [
+          IconButton(
+            tooltip: 'Sync with Supabase',
+            icon: service.isSyncing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.sync),
+            onPressed: service.isSyncing ? null : _handleRefresh,
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            AppCard(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  Column(
+                    children: [
+                      Text(
+                        '${service.activeAccountsCount}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                        ),
+                      ),
+                      const Text(
+                        'Active / Connected',
+                        style: TextStyle(fontSize: 12, color: AppColors.slate),
+                      ),
+                    ],
+                  ),
+                  Column(
+                    children: [
+                      Text(
+                        '${service.inactiveAccountsCount}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.gradeRed,
+                        ),
+                      ),
+                      const Text(
+                        'Inactive / Disconnected',
+                        style: TextStyle(fontSize: 12, color: AppColors.slate),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
             AppCard(
               padding: const EdgeInsets.all(14),
               child: Form(
@@ -188,7 +267,7 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Text(
-                      'Add Lecturer or Student Account',
+                      'Add Lecturer Account',
                       style: TextStyle(
                         fontSize: 15.5,
                         fontWeight: FontWeight.bold,
@@ -196,29 +275,10 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(
-                          value: 'Lecturer',
-                          label: Text('Lecturer'),
-                          icon: Icon(Icons.school_outlined),
-                        ),
-                        ButtonSegment(
-                          value: 'Student',
-                          label: Text('Student'),
-                          icon: Icon(Icons.person_outline),
-                        ),
-                      ],
-                      selected: {_selectedRole},
-                      onSelectionChanged: (selection) {
-                        setState(() => _selectedRole = selection.first);
-                      },
-                    ),
-                    const SizedBox(height: 12),
                     AppTextField(
                       controller: _nameController,
                       label: 'Full Name',
-                      hint: 'Enter full name',
+                      hint: 'Enter lecturer full name',
                       prefixIcon: Icons.badge_outlined,
                       validator: (v) => (v == null || v.trim().isEmpty)
                           ? 'Name is required'
@@ -228,20 +288,11 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
                     AppTextField(
                       controller: _emailController,
                       label: 'Email Address',
-                      hint: 'name@lincolnqueen.education',
+                      hint: 'first.last@limkokwing.edu.sl',
                       prefixIcon: Icons.email_outlined,
                       keyboardType: TextInputType.emailAddress,
                       validator: Validators.email,
                     ),
-                    if (_selectedRole == 'Student') ...[
-                      const SizedBox(height: 12),
-                      AppTextField(
-                        controller: _studentIdController,
-                        label: 'Linked Student ID',
-                        hint: 'e.g. BSEM1203F',
-                        prefixIcon: Icons.numbers,
-                      ),
-                    ],
                     const SizedBox(height: 12),
                     AppTextField(
                       controller: _passwordController,
@@ -252,7 +303,7 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
                     ),
                     const SizedBox(height: 14),
                     AppButton(
-                      label: 'Create Account',
+                      label: 'Create Lecturer Account',
                       icon: Icons.person_add_alt_1,
                       onPressed: _handleAddAccount,
                     ),
@@ -269,12 +320,62 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
                 color: AppColors.charcoal,
               ),
             ),
-            const SizedBox(height: 8),
-            ...managedAccounts.map(
-              (acc) {
-                final isStaff = acc.role == 'Lecturer' ||
-                    acc.role == 'Administrator';
-                final isPromotedAdmin = acc.role == 'Administrator';
+            const SizedBox(height: 10),
+            TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search by name, email, or Student ID...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                isDense: true,
+              ),
+              onChanged: (val) => setState(() => _searchQuery = val),
+            ),
+            const SizedBox(height: 10),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'All', label: Text('All')),
+                ButtonSegment(
+                  value: AppConstants.roleStudent,
+                  label: Text('Students'),
+                ),
+                ButtonSegment(
+                  value: AppConstants.roleLecturer,
+                  label: Text('Lecturers'),
+                ),
+              ],
+              selected: {_roleFilter},
+              onSelectionChanged: (selection) {
+                setState(() => _roleFilter = selection.first);
+              },
+            ),
+            const SizedBox(height: 10),
+            if (filteredAccounts.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Text(
+                  'No matching accounts found.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.slate),
+                ),
+              )
+            else
+              ...filteredAccounts.map((acc) {
+                final isStaff = acc.role == AppConstants.roleLecturer ||
+                    acc.role == AppConstants.roleAdministrator;
+                final isPromotedAdmin =
+                    acc.role == AppConstants.roleAdministrator;
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
@@ -304,6 +405,15 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
                                   color: AppColors.slate,
                                 ),
                               ),
+                              if (acc.linkedStudentId != null &&
+                                  acc.linkedStudentId!.isNotEmpty)
+                                Text(
+                                  'Student ID: ${acc.linkedStudentId}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.slate,
+                                  ),
+                                ),
                               Text(
                                 'Password: ${acc.password}',
                                 style: const TextStyle(
@@ -345,8 +455,7 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
                     ),
                   ),
                 );
-              },
-            ),
+              }),
           ],
         ),
       ),

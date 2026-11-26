@@ -10,6 +10,7 @@ class AppConstants {
   static const String moduleCode = 'PROG 202 - Software Engineering';
   static const String appVersion = '1.0.2+3';
   static const String logoAssetPath = 'assets/app_icon.png';
+  static const String allowedEmailDomain = '@limkokwing.edu.sl';
 
   // Default prototype accounts (also documented in README.md)
   static const String adminEmail = 'admin@limkokwing.edu.sl';
@@ -22,10 +23,14 @@ class AppConstants {
   static const String studentPassword = 'stu123';
 
   // Roles
+  static const String roleAdministrator = 'Administrator';
+  static const String roleLecturer = 'Lecturer';
+  static const String roleStudent = 'Student';
+
   static const List<String> userRoles = [
-    'Administrator',
-    'Lecturer',
-    'Student',
+    roleAdministrator,
+    roleLecturer,
+    roleStudent,
   ];
 
   static const List<String> programmes = [
@@ -45,4 +50,9 @@ class AppConstants {
     'Year 4 - Semester 1',
     'Year 4 - Semester 2',
   ];
+
+  // Class code structure: [Semester][Year]O[Section] (e.g., 12O3)
+  static const List<String> semesters = ['1', '2'];
+  static const List<String> studyYears = ['1', '2', '3', '4'];
+  static const List<String> classSections = ['O1', 'O2', 'O3', 'O4', 'O5'];
 }

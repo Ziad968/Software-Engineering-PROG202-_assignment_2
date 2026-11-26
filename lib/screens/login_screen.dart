@@ -23,6 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -38,28 +39,43 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  void _handleLogin() {
+  Future<void> _handleLogin() async {
+    if (_isSubmitting) return;
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
 
+    setState(() => _isSubmitting = true);
+
     final email = _emailController.text.trim();
     final password = _passwordController.text;
 
-    final account = ResultsService.instance.authenticate(email, password);
-    if (account == null) {
+    final result = await ResultsService.instance.authenticateAsync(
+      email,
+      password,
+    );
+
+    if (!mounted) return;
+
+    if (result.account == null) {
+      setState(() => _isSubmitting = false);
       UIHelpers.showSnackBar(
         context,
-        'Invalid email or password. Check README.md for prototype accounts.',
+        result.error ?? 'Invalid email or password.',
         isError: true,
       );
       return;
     }
 
     ResultsService.instance.setSession(
-      email: account.email,
-      role: account.role,
+      email: result.account!.email,
+      role: result.account!.role,
     );
+
+    await ResultsService.instance.syncFromSupabase();
+
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
 
     Navigator.pushNamedAndRemoveUntil(
       context,
@@ -134,13 +150,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 20),
                           AppButton(
-                            label: 'Log In',
+                            label: _isSubmitting ? 'Signing In...' : 'Log In',
                             icon: Icons.login,
-                            onPressed: _handleLogin,
+                            onPressed: _isSubmitting ? null : _handleLogin,
                           ),
                           const SizedBox(height: 10),
                           TextButton.icon(
-                            onPressed: _fillDemoCredentials,
+                            onPressed:
+                                _isSubmitting ? null : _fillDemoCredentials,
                             icon: const Icon(Icons.auto_fix_high, size: 18),
                             label: const Text('Fill Admin Demo Credentials'),
                           ),
@@ -155,10 +172,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       color: AppColors.primaryLight,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Text(
-                      'Prototype accounts are listed in README.md',
+                    child: Text(
+                      'Institutional ${AppConstants.allowedEmailDomain} accounts only. New accounts are provisioned by the Administrator.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: AppColors.primaryDark,
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,
